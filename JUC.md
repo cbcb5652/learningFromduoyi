@@ -398,30 +398,261 @@ public class Lock8 {
 **笔记：**
 
 > - 一个对象里面如果有多个sychronized方法，某一时刻内，只要一个线程去调用其中一个sychnorized方法了，其他的线程都只能等待，换句话说，某一时刻内，只能有唯一一个线程去访问这些sychronized方法，锁的当前对象this,被锁定后，其他的线程都不能进入到当前对象的其他的sychronized方法
->
-> - 加个普通方法后发现和同步锁无关，换成两个对象后，不是同一把锁了，情况立刻变化
->
+>- 加个普通方法后发现和同步锁无关，换成两个对象后，不是同一把锁了，情况立刻变化
 > - 都换成静态同步方法后，情况又变化所有的非静态同步方法用的都是同一把锁的实例对象本身
-> - sychronized实现同步的基础：Java中的每一个对象都可以作为锁，具体表现为以下三种
+>- sychronized实现同步的基础：Java中的每一个对象都可以作为锁，具体表现为以下三种
 >   - 对于普通同步方法，锁是当前实例对象
 >   - 对于静态同步方法，锁的是当前类的Class对象
 >   - 对于同步方法块，锁是Synchronized括号里配置的对象
->
 > - 当一个线程试图访问同步代码块时，它首先必须得到锁，退出或抛出异常时必须释放锁
 > - 也就是说如果一个实例对象的普通同步方法获取锁后，该实例对象的其他普通同步方法必须等待获取锁的方法释放后才能获取锁
-> - 可是别的实例对象的非静态同步方法 因为跟该实例对象的非静态同步方法用的是不同的锁，所以必须等待该实例对象已获取锁的非静态同步方法释放就可以获取他们自己的锁。
+>- 可是别的实例对象的非静态同步方法 因为跟该实例对象的非静态同步方法用的是不同的锁，所以必须等待该实例对象已获取锁的非静态同步方法释放就可以获取他们自己的锁。
 > - 所有的静态同步方法用的也是同一把锁---类对象本身，这两把锁是两个不同的对象，所以静态同步方法与非静态同步方法之间是不会有竞态条件的。
 > - 但是一旦一个静态同步方法获取锁后，其他的静态同步方法都必须等待该方法释放锁后才能获取锁，而不管是同一个实例对象的静态方法之间，还是不同的实例对象的静态同步方法之间，只要他们同一类的实例对象
->
 > 
 
+**Callable的一些使用**
+
+```java
+package juc;
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+
+class MyThread implements Callable<Integer>{
+    @Override
+    public Integer call() throws Exception {
+        System.out.println("come in here *************");
+        TimeUnit.SECONDS.sleep(2);
+        System.out.println(Thread.currentThread().getName());
+        return 1024;
+    }
+}
+
+public class CallableDemo {
+    public static void main(String[] args) throws Exception {
+
+        FutureTask futureTask = new FutureTask(new MyThread());
+        // 只会调用一次接口，经过一次计算之后，第二次调用的时候直接服用第一次的结果。   A和B都 有可能第一个进去
+        new Thread(futureTask,"A").start();
+        new Thread(futureTask,"B").start();
+
+        System.out.println(Thread.currentThread().getName()+"**************计算完成");
+
+        System.out.println(futureTask.get());
+
+    }
+}
+```
 
 
 
+## 四大JUC辅助类
+
+**CountDownLatch**
+
+```java
+package juc.四大辅助类;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 院子操作
+ */
+public class CountDownLatchDemo {
+
+    public static void main(String[] args) throws Exception {
+        CountDownLatch countDownLatch = new CountDownLatch(6);
+
+        for (int i = 1; i <= 6; i++) {
+            new Thread(()->{
+                countDownLatch.countDown();
+                System.out.println(Thread.currentThread().getName() + "\t离开教室");
+            },String.valueOf(i)).start();
+        }
+
+        // 等待
+        countDownLatch.await();
+        System.out.println(Thread.currentThread().getName() + "\t 关门走人");
+
+    }
+}
+```
+
+**CyclicBarrier**
+
+```java
+package juc.四大辅助类;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+
+/**
+ * 屏障
+ */
+public class CyclicBarrierDemo {
+
+    public static void main(String[] args) {
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(6,() ->{
+            System.out.println("----------召唤神龙-----------------");
+        });
+
+        for (int i = 1; i <= 7; i++) {
+            final int temp = i;
+            new Thread(() ->{
+                System.out.println(Thread.currentThread().getName()+"\t收集到第:"+temp+"颗龙珠");
+                try {
+                    cyclicBarrier.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+            },String.valueOf(i)).start();
+        }
+    }
+}
+```
+
+**Semphore**
+
+```java
+package juc.四大辅助类;
+
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 信号灯
+ */
+public class SemphoreDemo {
+    public static void main(String[] args) {
+        // 模拟资源类，有3个空车位
+        Semaphore semaphore = new Semaphore(3);
+
+        for (int i = 1; i <= 6; i++) {
+
+            new Thread(() ->{
+                try {
+                    semaphore.acquire();
+                    System.out.println(Thread.currentThread().getName()+ "\t抢占到了车位");
+                    TimeUnit.SECONDS.sleep(3);
+                    System.out.println(Thread.currentThread().getName()+"\t离开了车位");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }finally {
+                    semaphore.release();
+                }
+            },String.valueOf(i)).start();
+        }
+    }
+}
+```
+
+## 读写锁
+
+> 读锁: 防止读的时候其他线程写，允许读的时候其他线程读
+>
+> 写锁：防止其他线程读和写
+
+```java
+package juc;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+class MyCache{
+    private volatile Map<String,Object> map = new HashMap<>();
+    private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
 
+    public void put(String key,Object value) throws InterruptedException {
+        // 加写锁
+        readWriteLock.writeLock().lock();
 
+        System.out.println(Thread.currentThread().getName()+"\t ---写入数据:"+key);
+        // 暂停一会
+        TimeUnit.MILLISECONDS.sleep(300);
+        map.put(key,value);
+        System.out.println(Thread.currentThread().getName()+"\t ---写入完成~");
 
+        readWriteLock.writeLock().unlock();
+    }
+
+    public void get(String key) throws InterruptedException {
+        // 加读锁
+        readWriteLock.readLock().lock();
+
+        System.out.println(Thread.currentThread().getName() + "\t 读取数据");
+        TimeUnit.MILLISECONDS.sleep(300);
+        Object result = map.get(key);
+        System.out.println(Thread.currentThread().getName() + "\t 读取完成"+result);
+
+        readWriteLock.readLock().unlock();
+    }
+
+}
+
+/**
+ * 多个线程同时去读一个资源类没有任何问题，所以为了满足并发量，读取共享资源应该可以同时进行
+ * 但是
+ * 如果有线程想去写共享资源，就不应该再有其他线程可以对该资源进行读或写
+ * 总结：
+ *      - 读-读 能共享
+ *        读-写 不能共享
+ *        写-写 不能共享
+ */
+
+public class ReadWriteLockDemo {
+    public static void main(String[] args) {
+
+        MyCache myCache = new MyCache();
+
+        for (int i = 1; i <= 5; i++) {
+            final int tempInt = i;
+            new Thread(() ->{
+                try {
+                    myCache.put(tempInt+"" , tempInt + "");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            },String.valueOf(i)).start();
+        }
+
+        for (int i = 1; i <= 5; i++) {
+            final int tempInt = i;
+            new Thread(() ->{
+                try {
+                    myCache.get(tempInt+"" );
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            },String.valueOf(i)).start();
+        }
+    }
+}
+```
+
+一个线程拥有了对象A的写锁，在释放写锁前其他线程无法获得A的读锁、写锁，因此其他线程此时无法读写；
+一个线程拥有了对象A的读锁，在释放前其他线程可以获得A的读锁但无法获得A的写锁，因此其他线程此时可以读不可以写。
+不加读锁的话其他线程是可以读，但也可以写，这时就可能导致数据不一致了
+
+## 阻塞队列
+
+- **ArrayBlockingQueue**: 由数组结构组成的有界阻塞队列
+- **LinkedBlockQueue**: 由链表结构组成的有界队列（但大小默认值为Integer.MAX_VALUE） 阻塞队列
+- **PropityBlockingQueue**: 支持优先级排序的无界队列
+- **DelayQueue**： 使用优先级队列实现的延迟无界阻塞队列
+- **SynchronousQueue**： 不存储元素的阻塞队列，也即单个元素的队列
+- **LinkedTranferQueue**: 由链表组成的无界阻塞队列
+- **LinkedBlockingDeque**: 由链表组成的双向阻塞队列
+
+![image-20201219152255998](images/image-20201219152255998.png)
 
 
 
