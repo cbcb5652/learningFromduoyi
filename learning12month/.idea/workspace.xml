@@ -1,75 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="BranchesTreeState">
+    <expand>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="LOCAL_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="GROUP_NODE:origin" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+    </expand>
+    <select />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="4d0ba2a2-b7d0-43c2-94ee-ca665a75c724" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/OfflineRecommender/pom.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/OfflineRecommender/src/main/scala/com/duoyi/offline/OfflineRecommender.scala" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/pom.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/src/main/resources/log4j.properties" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/src/main/scala/com/atguigu/statistics/StatisticsRecommender.scala" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/GenresRecommendation.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/MongoConfig.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/Movie.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/Rating.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/Recommendation.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/com/atguigu/statistics/StatisticsRecommender.class" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/StatisticsRecommender/target/classes/log4j.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../MovieRecommendSystem/recommender/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/Comparator/TestLambda$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/Comparator/TestLambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/InterfaceIn/Lambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/Employee.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/FilterEmployeeByAge.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/FilterEmployeeBySalary.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/MyPredicate.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/main$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/filter/main.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/operator/Lambda$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/operator/Lambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/java8Characteristic/operator/MyFunction.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/Comparator/TestLambda$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/Comparator/TestLambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/InterfaceIn/Lambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/MethodLambda/Lambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/Employee$Status.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/Employee.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/FilterEmployeeByAge.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/FilterEmployeeBySalary.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/MyPredicate.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/main$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/filter/main.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/operator/Lambda$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/operator/Lambda.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/operator/MyFunction.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/stream/TestStreamAPI2.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/lambda/stream/TestStreamApi.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/Apple.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/FruitColor$Color.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/FruitColor.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/FruitName.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/FruitProvider.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/T.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/learning12month/注解/Test.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/Comparator/TestLambda.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/InterfaceIn/Lambda.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/MethodLambda/Lambda.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/filter/Employee.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/filter/FilterEmployeeByAge.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/filter/FilterEmployeeBySalary.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/filter/MyPredicate.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/filter/main.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/operator/Lambda.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/operator/MyFunction.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/stream/TestStreamAPI2.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/stream/TestStreamApi.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lambda/stream/ti.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/Apple.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/FruitColor.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/FruitName.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/FruitProvider.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/T.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/注解/Test.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../电影推荐项目.md" beforeDir="false" afterPath="$PROJECT_DIR$/../电影推荐项目.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/.mvn/wrapper/MavenWrapperDownloader.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/.mvn/wrapper/maven-wrapper.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/.mvn/wrapper/maven-wrapper.properties" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/mvnw" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/mvnw.cmd" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/pom.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/src/main/java/com/duoyi/ZookeeperApplication.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/src/main/java/com/duoyi/demo/ZookeeperProSync.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/src/main/resources/application.properties" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../zookeeper/src/test/java/com/duoyi/ZookeeperApplicationTests.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Zookeeper.md" beforeDir="false" afterPath="$PROJECT_DIR$/../Zookeeper.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -109,7 +71,7 @@
     <property name="project.structure.last.edited" value="Modules" />
     <property name="project.structure.proportion" value="0.15" />
     <property name="project.structure.side.proportion" value="0.2" />
-    <property name="settings.editor.selected.configurable" value="preferences.keymap" />
+    <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
   </component>
   <component name="RunManager" selected="Application.TestStreamAPI2">
     <configuration name="Lambda (2)" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
@@ -190,17 +152,6 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="ArquillianJUnit" factoryName="" nameIsGenerated="true">
-      <option name="arquillianRunConfiguration">
-        <value>
-          <option name="containerStateName" value="" />
-        </value>
-      </option>
-      <option name="TEST_OBJECT" value="class" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
     <configuration default="true" type="JetRunConfigurationType">
       <module name="learning" />
       <option name="VM_PARAMETERS" />
@@ -270,11 +221,23 @@
       <workItem from="1607053864636" duration="14928000" />
       <workItem from="1607493303926" duration="137000" />
       <workItem from="1608000078694" duration="62000" />
+      <workItem from="1608812529858" duration="48000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="WindowStateProjectService">
     <state x="440" y="94" key="#Project_Structure" timestamp="1606980308281">
@@ -321,10 +284,10 @@
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
     <state width="1877" height="348" key="GridCell.Tab.1.right/0.0.1920.1040@0.0.1920.1040" timestamp="1607082230215" />
-    <state x="461" y="164" key="SettingsEditor" timestamp="1607067647136">
+    <state x="461" y="157" key="SettingsEditor" timestamp="1608812549549">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
-    <state x="461" y="164" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1607067647136" />
+    <state x="461" y="157" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1608812549549" />
     <state x="334" y="130" key="new project wizard" timestamp="1607493439905">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
