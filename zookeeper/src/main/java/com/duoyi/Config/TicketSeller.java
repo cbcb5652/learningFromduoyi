@@ -29,7 +29,4 @@ public class TicketSeller {
             ticketSeller.sellTicketWithLock();
         }
     }
-
-
-
 }

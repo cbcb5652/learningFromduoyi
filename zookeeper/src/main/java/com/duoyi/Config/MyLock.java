@@ -6,8 +6,10 @@ import org.apache.zookeeper.data.Stat;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Collectors;
 
+/**
+ * 分布式锁
+ */
 public class MyLock {
 
     String IP = "49.232.151.218:2181";
@@ -18,13 +20,13 @@ public class MyLock {
     private String lockPath;
 
     // 打开zookeeper连接
-    public MyLock(){
-        try{
+    public MyLock() {
+        try {
             zooKeeper = new ZooKeeper(IP, 5000, new Watcher() {
                 @Override
                 public void process(WatchedEvent watchedEvent) {
-                    if (watchedEvent.getType() == Event.EventType.None){
-                        if (watchedEvent.getState() == Event.KeeperState.SyncConnected){
+                    if (watchedEvent.getType() == Event.EventType.None) {
+                        if (watchedEvent.getState() == Event.KeeperState.SyncConnected) {
                             System.out.println("连接成功~");
                             countDownLatch.countDown();
                         }
@@ -32,13 +34,13 @@ public class MyLock {
                 }
             });
             countDownLatch.await();
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     // 获取锁
-    public void acquireLock() throws Exception{
+    public void acquireLock() throws Exception {
         // 创建锁节点
         createLock();
         // 尝试获取锁
@@ -46,23 +48,23 @@ public class MyLock {
     }
 
     // 创建锁节点
-    private void createLock() throws Exception{
+    private void createLock() throws Exception {
         //判断Locks是否存在，不存在则创建
         Stat stat = zooKeeper.exists(LOCK_ROOT_PATH, false);
-        if (stat == null){
-            zooKeeper.create(LOCK_ROOT_PATH,new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        if (stat == null) {
+            zooKeeper.create(LOCK_ROOT_PATH, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         // 创建临时有序节点
         lockPath = zooKeeper.create(LOCK_ROOT_PATH + "/" + LOCK_NODE_NAME, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
-        System.out.println("节点创建成功："+lockPath);
+        System.out.println("节点创建成功：" + lockPath);
     }
 
     // 监视器对象，监视上一个节点
     Watcher watcher = new Watcher() {
         @Override
         public void process(WatchedEvent watchedEvent) {
-            if (watchedEvent.getType() == Event.EventType.NodeDeleted){
-                synchronized (this){
+            if (watchedEvent.getType() == Event.EventType.NodeDeleted) {
+                synchronized (this) {
                     notifyAll();
                 }
             }
@@ -70,24 +72,24 @@ public class MyLock {
     };
 
     // 尝试获取锁
-    private void attemptLock() throws Exception{
+    private void attemptLock() throws Exception {
 
         // 获取Locks节点下的所有节点
         List<String> list = zooKeeper.getChildren(LOCK_ROOT_PATH, false);
         // 对子节点进行排序
         Collections.sort(list);
-        int index = list.indexOf(lockPath.substring(LOCK_ROOT_PATH.length()+1));
-        if (index == 0){
+        int index = list.indexOf(lockPath.substring(LOCK_ROOT_PATH.length() + 1));
+        if (index == 0) {
             System.out.println("获取锁成功~");
-             return;
-        }else {
+            return;
+        } else {
             // 上一个节点的路径
-            String path = list.get(index -1);
+            String path = list.get(index - 1);
             Stat stat = zooKeeper.exists(LOCK_ROOT_PATH + "/" + path, watcher);
-            if (stat == null){
+            if (stat == null) {
                 attemptLock();
-            }else {
-                synchronized (watcher){
+            } else {
+                synchronized (watcher) {
                     watcher.wait();
                 }
             }
@@ -97,18 +99,18 @@ public class MyLock {
     }
 
     //释放锁
-    public void releaseLock() throws Exception{
-        zooKeeper.delete(this.lockPath,-1);
+    public void releaseLock() throws Exception {
+        zooKeeper.delete(this.lockPath, -1);
         zooKeeper.close();
         System.out.println("锁已经释放了~");
     }
 
 
     public static void main(String[] args) {
-        try{
+        try {
             MyLock myLock = new MyLock();
             myLock.createLock();
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }

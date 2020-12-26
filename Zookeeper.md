@@ -373,8 +373,17 @@ cp zoo_sample.cfg zoo-3.cfg
 
 ```shell
 # vim conf/zoo-1.cfg
+#数据快照所在路径
 dataDir=/dataDir=/usr/local/zookeeper/data/zookeeper1	
+服务应用端口
 clientPort=2181
+# 集群配置
+	# server.A = B:C:D
+	# A: 是一个数字，表示这个服务器的编号
+	# B：是这个服务器的ip地址
+	# C：Zookeeper服务器之间的通信端口
+	# D：Leader选举的端口
+
 server.1=127.0.0.1:2888:3888		# 这里对应的 1 对应dataDir 路径下的myid 
 server.2=127.0.0.1:2889:3889
 server.3=127.0.0.1:2890:3890
@@ -414,6 +423,67 @@ vi myid
 **查看集群状态**
 
 ![image-20201224135014347](images/image-20201224135014347.png)
+
+**一致性协议zab协议（zookeeper Atomic broadcast）原子广播协议。**
+
+![image-20201226135606493](images/image-20201226135606493.png)
+
+zab广播模式工作原理，通过类似两阶段提交协议的方式解决数据一致性问题
+
+![image-20201226135657040](images/image-20201226135657040.png)
+
+以上就算客户端连接的是Follower节点，发起写请求还是会将请求转发给Leader进行写入
+
+1. leader从客户端接收到一个请求
+2. leader生成一个新的事务并未这个事务生成一个唯一的ZXID
+3. leader将这个事务提议（propose）发送给所有的follows 节点
+4. follow节点将收到事务请求加入到历史队列（history queue）中，并发送出ack给leader
+5. 当leader收到大多数follower（半数以上的节点）的ack消息，leader会发送commit请求
+6. 当follower收到commit请求时，从历史队列中将事务请求commit
+
+### leader选举
+
+**服务器状态**
+
+- looking：寻找状态，当服务器处于该状态时，它会认为集群中没有leader，因此需要进入leader选举状态
+- leading： 领导者状态。表明当前服务器角色是leader
+- following：跟随者状态。表明当前服务器角色是follower
+- observing： 观察者状态，表明当前服务器角色是observer
+
+**服务器启动时期的leader选举**
+
+![image-20201226140628944](images/image-20201226140628944.png)
+
+所以启动第一个，再启动第二个，第二个会成为leader。再启动第三个的时候已经存在leader，会随着变为follower
+
+**服务器运行时期的选举**
+
+![image-20201226141325790](images/image-20201226141325790.png)
+
+**observer角色及其配置**
+
+observer角色的特点：
+
+1. 不参与集群的leader选举
+2. 不参与集群中写数据时的ack反馈
+
+为了使用observer，在任何想变成observer角色的配置文件中加入如下配置：
+
+```java
+peerType = observer
+```
+
+并在所有server的配置文件中，配置成observer模式的server的那行配置加上：observer，例如：
+
+```xml
+server.3 = 192.168.0.0:2289:3389:observer
+```
+
+
+
+
+
+
 
 ------
 
@@ -1282,17 +1352,877 @@ public class MyConfigCenter implements Watcher {
 4. 当前一位锁节点 ``Locks/Lock_000000001` 对应的客户端释放了锁，将会触发监听客户端 `Locks/Lock_000000002`   的逻辑
 5. 监听客户端重新执行第2步逻辑，判断自己是否获得了锁。 
 
+**分布式锁**
+
+```java
+package com.duoyi.Config;
+
+import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.Stat;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * 分布式锁
+ */
+public class MyLock {
+
+    String IP = "49.232.151.218:2181";
+    CountDownLatch countDownLatch = new CountDownLatch(1);
+    ZooKeeper zooKeeper;
+    private static final String LOCK_ROOT_PATH = "/Locks";
+    private static final String LOCK_NODE_NAME = "Lock_";
+    private String lockPath;
+
+    // 打开zookeeper连接
+    public MyLock() {
+        try {
+            zooKeeper = new ZooKeeper(IP, 5000, new Watcher() {
+                @Override
+                public void process(WatchedEvent watchedEvent) {
+                    if (watchedEvent.getType() == Event.EventType.None) {
+                        if (watchedEvent.getState() == Event.KeeperState.SyncConnected) {
+                            System.out.println("连接成功~");
+                            countDownLatch.countDown();
+                        }
+                    }
+                }
+            });
+            countDownLatch.await();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 获取锁
+    public void acquireLock() throws Exception {
+        // 创建锁节点
+        createLock();
+        // 尝试获取锁
+        attemptLock();
+    }
+
+    // 创建锁节点
+    private void createLock() throws Exception {
+        //判断Locks是否存在，不存在则创建
+        Stat stat = zooKeeper.exists(LOCK_ROOT_PATH, false);
+        if (stat == null) {
+            zooKeeper.create(LOCK_ROOT_PATH, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        }
+        // 创建临时有序节点
+        lockPath = zooKeeper.create(LOCK_ROOT_PATH + "/" + LOCK_NODE_NAME, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
+        System.out.println("节点创建成功：" + lockPath);
+    }
+
+    // 监视器对象，监视上一个节点
+    Watcher watcher = new Watcher() {
+        @Override
+        public void process(WatchedEvent watchedEvent) {
+            if (watchedEvent.getType() == Event.EventType.NodeDeleted) {
+                synchronized (this) {
+                    notifyAll();
+                }
+            }
+        }
+    };
+
+    // 尝试获取锁
+    private void attemptLock() throws Exception {
+
+        // 获取Locks节点下的所有节点
+        List<String> list = zooKeeper.getChildren(LOCK_ROOT_PATH, false);
+        // 对子节点进行排序
+        Collections.sort(list);
+        int index = list.indexOf(lockPath.substring(LOCK_ROOT_PATH.length() + 1));
+        if (index == 0) {
+            System.out.println("获取锁成功~");
+            return;
+        } else {
+            // 上一个节点的路径
+            String path = list.get(index - 1);
+            Stat stat = zooKeeper.exists(LOCK_ROOT_PATH + "/" + path, watcher);
+            if (stat == null) {
+                attemptLock();
+            } else {
+                synchronized (watcher) {
+                    watcher.wait();
+                }
+            }
+            attemptLock();
+        }
+
+    }
+
+    //释放锁
+    public void releaseLock() throws Exception {
+        zooKeeper.delete(this.lockPath, -1);
+        zooKeeper.close();
+        System.out.println("锁已经释放了~");
+    }
+
+
+    public static void main(String[] args) {
+        try {
+            MyLock myLock = new MyLock();
+            myLock.createLock();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+**客户端**
+
+```java
+package com.duoyi.Config;
+
+public class TicketSeller {
+
+    private void sell(){
+        System.out.println("售票开始");
+        int sleepMillis = 5000;
+        try{
+            Thread.sleep(sleepMillis);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        System.out.println("售票结束");
+    }
+
+    private void sellTicketWithLock() throws Exception{
+        // 使sell方法 锁住
+        MyLock myLock = new MyLock();
+        // 获取锁
+        myLock.acquireLock();
+        sell();
+        // 释放锁
+        myLock.releaseLock();
+    }
+
+    public static void main(String[] args) throws Exception {
+        TicketSeller ticketSeller = new TicketSeller();
+        for (int i = 0; i < 10; i++) {
+            ticketSeller.sellTicketWithLock();
+        }
+    }
+}
+```
+
+## curator
+
+> curator框架在zookeeper原生API接口上进行包装，解决了很多zookeeper客户端非常底层的细节开发。提供zookeeper各种应用场景（比如：分布式锁服务，集群领导选举，共享计数器，缓存机制，分布式队列等）的抽象封装，实现了Fluent风格的API接口，是最好用，最流行的zookeeper的客户端。
+
+原生zookeeperAPI的不足：
+
+- 连接对象异步创建，需要开发人员自行编码等待
+- 连接没有自动重连超时机制
+- watcher一次注册生效一次
+- 不支持递归创建树型节点
+
+curator特点：
+
+- 解决session会话超时重连问题
+- watcher反复注册
+- 简化开发API
+- 遵循Fluent风格的API
+- 提供了分布式锁服务，共享计数器，缓存机制等机制
+
+### **创建连接及重连策略**
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.retry.RetryNTimes;
+import org.apache.curator.retry.RetryOneTime;
+import org.apache.curator.retry.RetryUntilElapsed;
+
+public class CuratorConnection {
+
+    public static void main(String[] args) {
+
+        //3秒后重连
+        RetryPolicy retryPolicy = new RetryOneTime(3000);
+
+        // 每3秒重连一次，重连3此
+        RetryPolicy retryPolicy1 = new RetryNTimes(3,3000);
+
+        //每3秒重连一次，总等待时间超过10秒后停止重连
+        RetryPolicy retryPolicy2 = new RetryUntilElapsed(1000,3000);
+
+        //baseSleepTimeMs * Math.max(1,random.nextInt(1<<(retryCount + 1))
+        RetryPolicy retryPolicy3 = new ExponentialBackoffRetry(1000,3);
+
+        // 创建连接对象
+        CuratorFramework client = CuratorFrameworkFactory.builder()
+                // 地址端口号
+                .connectString("49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183")
+                // 会话超时时间
+                .sessionTimeoutMs(5000)
+                // 重连机制
+                .retryPolicy(retryPolicy3)
+                // 命名空间
+                .namespace("create")
+                // 构建连接对象
+                .build();
+
+        // 打开连接
+        client.start();
+        System.out.println(client.isStarted());
+        // 关闭连接
+        client.close();
+    }
+}
+```
+
+### **创建create**
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.data.ACL;
+import org.apache.zookeeper.data.Id;
+import org.checkerframework.checker.units.qual.A;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class CuratorCreate {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before(){
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000,3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("create")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after(){
+        client.close();
+    }
+
+
+    @Test
+    public void create1() throws Exception{
+        // 新增节点
+        client.create()
+                // 节点的类型
+                .withMode(CreateMode.PERSISTENT)
+                // 节点的权限列表  world:anyone:cdrwa
+                .withACL(ZooDefs.Ids.OPEN_ACL_UNSAFE)
+                //arg1: 节点的路径
+                //args2: 节点的数据
+        .forPath("/node1","node1".getBytes());
+        System.out.println("结束");
+    }
+
+
+    @Test
+    public void create2() throws Exception{
+        // 自定义权限类
+        // 创建权限列表
+        List<ACL> list = new ArrayList<>();
+        // 授权模式和授权对象
+        Id id = new Id("ip","49.232.151.218");
+        list.add(new ACL(ZooDefs.Perms.ALL,id));
+        client.create().withMode(CreateMode.PERSISTENT).withACL(list).forPath("/node2","node2".getBytes());
+        System.out.println("结束");
+    }
+
+
+    @Test
+    public void create3()throws Exception{
+        // 递归创建节点树
+        client.create()
+                .creatingParentsIfNeeded()   // 递归创建父节点（父节点不存在的话）
+                .withMode(CreateMode.PERSISTENT).withACL(ZooDefs.Ids.OPEN_ACL_UNSAFE).forPath("node3/node31","node31".getBytes());
+        System.out.println("结束");
+    }
+
+    @Test
+    public void create4() throws Exception{
+        // 异步创建
+        client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+                .withACL(ZooDefs.Ids.OPEN_ACL_UNSAFE)
+                // 异步创建  回调接口
+        .inBackground(new BackgroundCallback() {
+            @Override
+            public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                System.out.println(curatorEvent.getPath());
+                System.out.println(curatorEvent.getType());
+            }
+        }).forPath("/node4","node4".getBytes());
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 删除delete
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+public class CuratorDelete {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before(){
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000,3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("create")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after(){
+        client.close();
+    }
+
+
+    @Test
+    public void delete1() throws Exception{
+        // 删除节点
+        client.delete().forPath("/node1");
+        System.out.println("结束");
+    }
+
+
+    @Test
+    public void delete2() throws Exception{
+        client.delete()
+                // 版本号
+                .withVersion(4).forPath("/node1");
+        System.out.println("结束");
+    }
+
+
+    @Test
+    public void delete3()throws Exception{
+        // 删除包含子节点的节点
+        client.delete()
+                .deletingChildrenIfNeeded()
+                .withVersion(-1).forPath("/node1");
+        System.out.println("结束");
+    }
+
+    @Test
+    public void delete4() throws Exception{
+        // 异步创建
+       client.delete().deletingChildrenIfNeeded()
+               .withVersion(-1)
+               .inBackground(new BackgroundCallback() {
+                   @Override
+                   public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                        //节点路径
+                       System.out.println(curatorEvent.getPath());
+                       //时间类型
+                       System.out.println(curatorEvent.getType());
+                   }
+               }).forPath("/node1");
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 判断存在Exists
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.data.Stat;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.List;
+
+public class CuratorExists {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before() {
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("get")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after() {
+        client.close();
+    }
+
+
+    @Test
+    public void exist1() throws Exception {
+       // 判断节点是否存在
+        Stat stat = client.checkExists()
+                // 节点路径
+                .forPath("/node3");
+        System.out.println(stat);
+    }
+
+
+    @Test
+    public void exist2() throws Exception {
+        // 异步方式判断节点是否存在
+        client.checkExists().inBackground(new BackgroundCallback() {
+            @Override
+            public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                // 节点路径
+                System.out.println(curatorEvent.getPath());
+                // 事件类型
+                System.out.println(curatorEvent.getType());
+                System.out.println(curatorEvent.getStat().getVersion());
+            }
+        }).forPath("/node2");
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 获取Get
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.data.Stat;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+public class CuratorGet {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before() {
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("get")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after() {
+        client.close();
+    }
+
+
+    @Test
+    public void get1() throws Exception {
+        // 读取数据
+        byte[] bytes = client.getData().forPath("/node1");
+        System.out.println(new String(bytes));
+    }
+
+
+    @Test
+    public void get2() throws Exception {
+        // 读取节点属性
+        Stat stat = new Stat();
+        byte[] bytes = client.getData()
+                // 读取属性
+                .storingStatIn(stat)
+                .forPath("/node1");
+        System.out.println(new String(bytes));
+        System.out.println(stat.getVersion());
+    }
+
+
+    @Test
+    public void get3() throws Exception {
+       // 异步方式读取
+        client.getData().inBackground(new BackgroundCallback() {
+            @Override
+            public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                //节点路径
+                System.out.println(curatorEvent.getPath());
+                //事件类型
+                System.out.println(curatorEvent.getType());
+                // 数据
+                System.out.println(new String(curatorEvent.getData()));
+            }
+        }).forPath("/node1");
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+
+    @Test
+    public void delete4() throws Exception {
+        // 异步创建
+        client.delete().deletingChildrenIfNeeded()
+                .withVersion(-1)
+                .inBackground(new BackgroundCallback() {
+                    @Override
+                    public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                        //节点路径
+                        System.out.println(curatorEvent.getPath());
+                        //时间类型
+                        System.out.println(curatorEvent.getType());
+                    }
+                }).forPath("/node1");
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 获取子节点getChild
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.data.Stat;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.List;
+
+public class CuratorGetChild {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before() {
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("get")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after() {
+        client.close();
+    }
+
+
+    @Test
+    public void getChild1() throws Exception {
+        // 读取子节点数据
+        List<String> list = client.getChildren()
+                // 节点路径
+                .forPath("/get");
+        list.forEach(l ->{
+            System.out.println(l);
+        });
+    }
+
+
+    @Test
+    public void getChild2() throws Exception {
+        // 异步方式读取子节点数据
+        client.getChildren()
+                .inBackground(new BackgroundCallback() {
+                    @Override
+                    public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                        // 节点路径
+                        System.out.println(curatorEvent.getPath());
+                        // 数据类型
+                        System.out.println(curatorEvent.getType());
+                        // 读取子节点数据
+                        List<String> list = curatorEvent.getChildren();
+                        for (String s : list) {
+                            System.out.println(s);
+                        }
+                    }
+                }).forPath("/get");
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 修改set
+
+```java
+package com.duoyi.curatorAPI;
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.BackgroundCallback;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.data.ACL;
+import org.apache.zookeeper.data.Id;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class CuratorSet {
+
+    String IP = "49.232.151.218:2181,49.232.151.218:2182,49.232.151.218:2183";
+    CuratorFramework client;
+
+    @Before
+    public void before(){
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000,3);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(IP)
+                .sessionTimeoutMs(5000)
+                .retryPolicy(retryPolicy)
+                .namespace("create")
+                .build();
+        client.start();
+    }
+
+    @After
+    public void after(){
+        client.close();
+    }
+
+
+    @Test
+    public void set1() throws Exception{
+        // 更新节点
+        client.setData()
+                // arg1 节点的路径
+                // arg2 节点的数据
+                .forPath("/node1","node11".getBytes());
+    }
+
+
+    @Test
+    public void set2() throws Exception{
+        client.setData()
+                // 指定版本号
+                .withVersion(-1).forPath("/node1","node111".getBytes());
+    }
+
+
+    @Test
+    public void set3()throws Exception{
+       // 异步方式修改节点数据
+        client.setData().withVersion(-1).inBackground(new BackgroundCallback() {
+            @Override
+            public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                // 节点的路径
+                System.out.println(curatorEvent.getPath());
+                // 事件类型
+                System.out.println(curatorEvent.getType());
+            }
+        }).forPath("/node1","node1".getBytes());
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+
+    @Test
+    public void create4() throws Exception{
+        // 异步创建
+        client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+                .withACL(ZooDefs.Ids.OPEN_ACL_UNSAFE)
+                // 异步创建  回调接口
+        .inBackground(new BackgroundCallback() {
+            @Override
+            public void processResult(CuratorFramework curatorFramework, CuratorEvent curatorEvent) throws Exception {
+                System.out.println(curatorEvent.getPath());
+                System.out.println(curatorEvent.getType());
+            }
+        }).forPath("/node4","node4".getBytes());
+        Thread.sleep(5000);
+        System.out.println("结束");
+    }
+}
+```
+
+### 监控命令
+
+![image-20201226162156295](images/image-20201226162156295.png)
+
+**==conf命令==**
+
+**查看zookeeper的配置信息**
+
+```xml
+echo  conf | nc localhost 2181
+```
 
 
 
+![image-20201226162958844](images/image-20201226162958844.png)
+
+![image-20201226163032103](images/image-20201226163032103.png)
+
+**==cons命令==**
+
+```shell
+echo cons | nc localhost 2181
+```
+
+![image-20201226163410008](images/image-20201226163410008.png)
+
+**==crst命令==**
+
+crst：重置当前这台服务器所有连接/ 会话的统计信息
+
+shell终端输入：echo crst | nc localhost 2181
+
+**==dump命令==**
+
+dump：列出未经处理的会话和临时节点
+
+shell终端输入：echo dump | nc localhost 2181
 
 
 
+| 属性        | 含义                                                 |
+| ----------- | ---------------------------------------------------- |
+| session  id | znode path(1对多，处于队列中排队的session和临时节点) |
 
+**==envi命令==**
 
+envi：输出关于服务器的环境配置信息
 
+shell终端输入：echo envi | nc localhost 2181
 
+![image-20201226171720797](images/image-20201226171720797.png)
 
+**==ruok命令==**
+
+ruok：测试服务器是否处于正在运行状态
+
+shell终端输入：
+
+```shell
+echo ruok | nc localhost 2181
+```
+
+**==stat命令==**
+
+stat：输出服务器的详细信息与srvr相似，但是多了每个链接的会话信息
+
+shell终端输入：
+
+```shell
+echo stat | nc locahost 2181
+```
+
+![image-20201226172201502](images/image-20201226172201502.png)
+
+**==srst命令==**
+
+srst：重置server状态
+
+```shell
+echo srst | nc localhost 2181
+```
+
+**==wchs命令==**
+
+wchs: 列出服务器watches的简洁信息
+
+```shell
+echo wchs | nc localhost 2181
+```
+
+![image-20201226172703565](images/image-20201226172703565.png)
+
+**==wchc==**
+
+wchc: 通过session分组，列出watch的所有节点，它的输出是一个与watch相关的会话的节点列表
+
+![image-20201226172909618](images/image-20201226172909618.png)
+
+**==wchp命令==**
+
+wchp： 通过路径分组，列出所有的watch 的session信息
+
+![image-20201226173329215](images/image-20201226173329215.png)
+
+**==mntr命令==**
+
+mntr: 列出服务器的健康状态
+
+![image-20201226173449435](images/image-20201226173449435.png)
+
+![image-20201226173535386](images/image-20201226173535386.png)
 
 
 
