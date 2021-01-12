@@ -79,7 +79,7 @@ public class MyLock {
         // 对子节点进行排序
         Collections.sort(list);
         int index = list.indexOf(lockPath.substring(LOCK_ROOT_PATH.length() + 1));
-        if (index == 0) {
+        if (index == 0 ) {
             System.out.println("获取锁成功~");
             return;
         } else {

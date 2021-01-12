@@ -70,6 +70,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!--集合的工具类-->
+        <!--<dependency>
+            <groupId>com.google.collections</groupId>
+            <artifactId>goole-collections</artifactId>
+            <version>1.0</version>
+        </dependency>-->
     </dependencies>
 
     <build>
