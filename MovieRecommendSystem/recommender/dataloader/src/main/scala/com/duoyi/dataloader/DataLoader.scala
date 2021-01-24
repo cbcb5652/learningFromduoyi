@@ -10,7 +10,6 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest
 import org.elasticsearch.common.settings.Settings
-import org.elasticsearch.common.transport.InetSocketTransportAddress
 import org.elasticsearch.transport.client.PreBuiltTransportClient
 
 /**
@@ -85,9 +84,9 @@ case class ESConfig(httpHosts:String, transportHosts:String, index:String, clust
 object DataLoader {
 
   // 定义常量
-  val MOVIE_DATA_PATH = "D:\\Projects\\BigData\\MovieRecommendSystem\\recommender\\DataLoader\\src\\main\\resources\\movies.csv"
-  val RATING_DATA_PATH = "D:\\Projects\\BigData\\MovieRecommendSystem\\recommender\\DataLoader\\src\\main\\resources\\ratings.csv"
-  val TAG_DATA_PATH = "D:\\Projects\\BigData\\MovieRecommendSystem\\recommender\\DataLoader\\src\\main\\resources\\tags.csv"
+  val MOVIE_DATA_PATH = "F:\\aboutIT\\learningFromduoyi\\MovieRecommendSystem\\recommender\\dataloader\\src\\main\\resources\\movies.csv"
+  val RATING_DATA_PATH = "F:\\aboutIT\\learningFromduoyi\\MovieRecommendSystem\\recommender\\dataloader\\src\\main\\resources\\ratings.csv"
+  val TAG_DATA_PATH = "F:\\aboutIT\\learningFromduoyi\\MovieRecommendSystem\\recommender\\dataloader\\src\\main\\resources\\tags.csv"
 
   // 表
   val MONGODB_MOVIE_COLLECTION = "Movie"
@@ -100,22 +99,20 @@ object DataLoader {
 
     val config = Map(
       "spark.cores" -> "local[*]",
-      "mongo.uri" -> "mongodb://localhost:27017/recommender",
+      "mongo.uri" -> "mongodb://linux:27017/recommender",
       "mongo.db" -> "recommender",
-      "es.httpHosts" -> "localhost:9200",
-      "es.transportHosts" -> "localhost:9300",
+      "es.httpHosts" -> "linux:9200",
+      "es.transportHosts" -> "linux:9300",
       "es.index" -> "recommender",
-      "es.cluster.name" -> "elasticsearch"      //  -->  进入es的conf中看elasticsearch.yml 配置文件里面的cluster.name为啥对应的就是这个elasticsearch (es-cluster)
+      "es.cluster.name" -> "es-cluster"      //  -->  进入es的conf中看elasticsearch.yml 配置文件里面的cluster.name为啥对应的就是这个elasticsearch (es-cluster)
     )
 
     // 创建一个sparkConf配置
     val sparkConf = new SparkConf().setMaster(config("spark.cores")).setAppName("DataLoader")
+    sparkConf.set("es.nodes.wan.only","true");
 
     // 创建一个SparkSession
     val spark = SparkSession.builder().config(sparkConf).getOrCreate()
-
-
-
 
     import spark.implicits._    // 导入这个是为了toDF方法
     //------------------------------------------
@@ -163,7 +160,7 @@ object DataLoader {
       .select("mid", "tags")
 
     // newTag和movie做join，数据合并在一起，左外连接
-    val movieWithTagsDF = movieDF.join(newTag, Seq("mid","mid"), "left")         // 连接 两个mid一样的数据,left 左连接--> 因为有些电影没有标签，不可能就不显示电影吧
+    val movieWithTagsDF = movieDF.join(newTag, Seq("mid"), "left")         // 连接 两个mid一样的数据,left 左连接--> 因为有些电影没有标签，不可能就不显示电影吧
 
     implicit val esConfig = ESConfig(config("es.httpHosts"), config("es.transportHosts"), config("es.index"), config("es.cluster.name"))
 
@@ -220,15 +217,17 @@ object DataLoader {
   // 将数据保存到ES中的方法
   def storeDataInES(movieDF: DataFrame)(implicit eSConfig: ESConfig): Unit ={
     // 新建es配置
-    val settings: Settings = Settings.builder().put("cluster.name", eSConfig.clustername).build()
+    /*val settings: Settings = Settings.builder().put("cluster.name", eSConfig.clustername).build()
 
     // 新建一个es客户端
     val esClient = new PreBuiltTransportClient(settings)
 
     // 需要将TransportHosts 添加到esClient中
     val REGEX_HOST_PORT = "(.+):(\\d+)".r           //.r 转换为正则表达式
+
     eSConfig.transportHosts.split(",").foreach{
       case REGEX_HOST_PORT(host: String, port: String) => {
+        // host -> linux      port -> 9300
         esClient.addTransportAddress(new InetSocketTransportAddress( InetAddress.getByName(host), port.toInt ))
       }
     }
@@ -241,7 +240,7 @@ object DataLoader {
       esClient.admin().indices().delete( new DeleteIndexRequest(eSConfig.index) )
     }
 
-    esClient.admin().indices().create( new CreateIndexRequest(eSConfig.index) )
+    esClient.admin().indices().create( new CreateIndexRequest(eSConfig.index) )*/
 
     movieDF.write
       .option("es.nodes", eSConfig.httpHosts)

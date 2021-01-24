@@ -17,8 +17,6 @@ case class Recommendation( mid: Int, score: Double )
 // 定义电影类别top10推荐对象
 case class GenresRecommendation( genres: String, recs: Seq[Recommendation] )
 
-// 推荐
-case class Recommendation(rid:Int,r:Double)
 
 // 用户的推荐
 case class UserRecs(uid:Int,recs:Seq[Recommendation])
@@ -38,9 +36,10 @@ object OfflineRecommender {
   // 入口方法
   def main(args: Array[String]): Unit = {
 
+    //mongoDB配置参数
     val config = Map(
       "spark.cores" -> "local[*]",
-      "mongo.uri" -> "mongodb://linux:27017//recommender",
+      "mongo.uri" -> "mongodb://linux:27017/recommender",
       "mongo.db" -> "recommender"
     )
 
@@ -56,7 +55,7 @@ object OfflineRecommender {
 
     import spark.implicits._
 
-    // 读取mongoDB中的业务数据
+    // 读取mongoDB中的业务数据  ratingRDD是一个三元组类型 int int double
     val ratingRDD = spark
       .read
       .option("uri",mongoConfig.uri)
@@ -67,10 +66,10 @@ object OfflineRecommender {
       .rdd
       .map(rating=> (rating.uid,rating.mid,rating.score))
 
-    // 用户的数据集 RDD[Int]
+    // 用户的数据集 RDD[Int]    去重
     val userRDD = ratingRDD.map(_._1).distinct()
 
-    // 电影的数据集
+    // 电影的数据集  RDD[Int]
     val movieRDD = spark
       .read
       .option("uri",mongoConfig.uri)
@@ -87,6 +86,7 @@ object OfflineRecommender {
     // 50个数据迭代10次
     val (rank,iterations,lambda) = (50,10,0.01)
 
+    // 传入参数:训练模型,迭代的数据,迭代次数,迭代频率
     val model = ALS.train(trainData,rank, iterations,lambda)
 
     // 计算用户推荐矩阵
@@ -96,11 +96,13 @@ object OfflineRecommender {
 
     val preRatings = model.predict(userMovies)
 
+    // 排序厚，获取前20个
     val userRecs = preRatings.map(rating => (rating.user,(rating.product,rating.rating)))
       .groupByKey()
       .map{
         case (uid,recs) => UserRecs(uid,recs.toList.sortWith(_._2 > _._2).take(USER_MAX_RECOMMENDATION).map(x => Recommendation(x._1,x._2)))
       }.toDF()
+
 
     userRecs.write
       .option("uri",mongoConfig.uri)
@@ -110,11 +112,10 @@ object OfflineRecommender {
       .save()
 
     // 计算电影相似度
-    
+
 
     // 关闭spark
     spark.close()
-
 
   }
 
