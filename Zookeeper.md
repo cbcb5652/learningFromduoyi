@@ -34,12 +34,40 @@ znode的数据每次更改时，版本号都会增加。例如当客户端检索
 
 zookeeper有四种节点：
 
-- 顺序临时
-- 顺序永久
-- 非顺序临时
-- 非顺序永久
+- 顺序临时（EPHEMERAL_SEQUENTIAL）
+- 顺序永久（PERSISTENT_SEQUENTIAL）
+- 非顺序临时（EPHEMERAL）
+- 非顺序永久（PERSISTENT）
 
 临时节点的意义：只要创建znode，当处于活动状态的时候，znode也存在，回话结束，将删除znode。可以用来维护，并通知该程序是否挂掉，选举新的master。（类似于redis的哨兵）
+
+### 节点属性
+
+> 每个znode都包含一系列属性，通过命令get，可以获得节点属性
+
+![image-20210106100916314](images/image-20210106100916314.png)
+
+**dataVersion:** 数据版本号，每次对节点进行set操作，dataVersion的值都会增加1（即使设置的是相同的数据），可有效避免了数据更新时出现的先后顺序问题。
+
+**cVersion:** 子节点的版本号。当znode的子节点有变化时，cVersion的值就会增加1
+
+**aclVersion:** ACL的版本号
+
+**cZxid:** Znode创建的事务id
+
+**mZxid:** Znode被修改的事务id，即每次对znode的修改都会更新mZxid
+
+- 对于zk来说，每次的变化都会产生一个唯一的事务id，zxid(Zookeeper Transaction Id)。通过zxid，可以确定更新操作的先后顺序。例如，如果zxid1小于zxid2，说明zxid1操作先于zxid2发生，zxid对于整个zk都是唯一的。
+
+**ctime:**  节点创建的时间戳
+
+**ephemeralOwner:** 如果该节点为临时节点，ephemeralOwner值表示该节点绑定的session id. 如果不是,ephemeralOwner值为0
+
+
+
+
+
+
 
 ### 有条件的监听
 
@@ -90,10 +118,6 @@ ls2 /hadoop watch
 - Disconnected： 客户端与服务端断开连接时
 - Expired： 会话session失效
 - AuthFailed：身份认证失败时
-
-
-
-
 
 
 
@@ -1298,6 +1322,8 @@ public class MyConfigCenter implements Watcher {
 
 ## 分布式锁
 
+> 基于数据库实现的分布式锁，基于缓存实现分布式锁，基于zookeeper实现分布式锁。
+
 ### 为什么要分布式锁
 
    系统A是一个电商系统，只有一台服务器，系统用户下单的时候需要去订单接口看一下该商品是否有库存，如果有库存才能正常下单。
@@ -1341,6 +1367,109 @@ public class MyConfigCenter implements Watcher {
 参考连接：https://zhuanlan.zhihu.com/p/73807097
 
 -----
+
+### Mysql分布式锁
+
+> 直接创建一张锁表，然后通过操作该表中的数据来实现。（当我们要锁住某个方法或资源时），我们就在该表中增加一条记录，想要释放锁的时候就删除这条记录。
+
+创建如下这张表：
+
+![image-20201228165657518](images/image-20201228165657518.png)
+
+当我们需要锁住某个方法的时候，可以执行以下SQL插入数据
+
+```sql
+insert into methodLock(method_name,desc) values('method_name','desc')
+```
+
+我们做了method_name的唯一约束，当多个请求提交到数据库的时候，只会保证有一个操作成功。操作成功就获得了该方法的锁，可执行方法体内容
+
+当需要释放的时候执行以下SQL
+
+```sql
+delete from methodLock where method_name = 'method_name'
+```
+
+这种方法存在几个问题
+
+> 1. 这把锁强依赖于数据库，数据库是一个单点，一旦数据库挂掉，就会导致业务系统不可用								==数据库集群==
+>
+> 2. 这把锁没有失效时间，一旦解锁操作失败，就会导致锁记录一直在数据库中，其他线程无法获取锁                    ==定时任务删除锁==
+>
+> 3. 这把锁只能是非阻塞的，一旦insert插入失败会直接报错。没有获取锁的线程并不会进入队列，想要再次获取锁就要再次触发获得锁操作    
+>
+>     ==while循环等待插入成功==
+>
+> 4. 这把锁是非重入的，同一个线程在没有释放锁之前无法再次获得该锁。因为数据库中数据已经存在了               ==数据库加个字段来判断==
+
+-----
+
+**基于数据库排他锁**
+
+> 除了可以通过增删操作数据表中的记录以外，其实还可以借助数据中自带的锁来实现分布式锁。
+>
+> 我们还是基于刚刚创建的那张数据库表。可以通过数据库的排他锁来实现分布式锁。基于Mysql的InnoDB引擎，可以使用以下方法来实现枷锁操作。
+
+![image-20201228172652090](images/image-20201228172652090.png)
+
+在查询语句后面增加for update，数据会在查询过程中给数据表增加排他锁（Innodb引擎在加锁的时候，只有通过索引进行检索的时候才会使用行级锁，否则使用表级锁）记录的时候需要把方法的参数及参数类型也带上，避免出现重载方法之间无法同时被调用的问题。
+
+我们可以认为获得排他锁的线程即可获得分布式锁，当获取到锁的时候可以执行方法的业务逻辑，执行完方法之后，通过以下方法解锁
+
+```java
+public void unlock(){
+    connection.commit();
+}
+```
+
+这种方法可以有效的解决上面的问题：
+
+- 阻塞锁？ for update语句会在执行成功后立即返回，在执行失败时一直处于阻塞状态，直到成功
+- 锁定之后服务宕机，无法释放？ 使用这种方式，服务器宕机之后数据库会自己把锁释放。
+
+**总结**
+
+> 两种方式都是依赖一张数据表，一张是通过表中记录的存在情况确定当前是否有所的存在，另外一种是通过数据库的排他锁来实现分布式锁。
+
+优点：
+
+- 直接借助数据库，容易理解
+
+缺点：
+
+- 会有各种各样的问题，在解决问题的过程中会使整个方案变得越来越复杂
+- 操作数据库需要一定的开销，性能问题需要考虑
+- 使用数据库的行级锁不一定靠谱，尤其是当我们的锁表并不大的时候
+
+
+
+### Redis分布式锁
+
+> 使用redis实现比数据库实现要好，性能要高于数据库。而且很多缓存是可以集群部署的，可以解决单点问题。
+
+但是该实现方式存在几个问题：
+
+> 1. 原子性操作的话 这把锁没有失效时间，一旦解锁操作失败，就会导致锁记录一致在，其他线程无法枷锁。
+> 2. 这把锁只能是非阻塞的，无论是成功还是失败都是直接返回。
+> 3. 这把锁是非重入的，一个线程获得锁之后，在释放锁之前，无法再次获得该锁，因为使用到key在redis中已经存在，无法再执行put操作
+
+可以使用以下方案来解决
+
+> - 可以给键设置过期时间，但是这样的话却无法保证原子性
+> - 非阻塞，while重复执行。
+> - 非可重入？在一个线程获取到锁之后，把当前主机信息和线程信息保存起来，下次在获取之前先检查是不是当前锁的拥有者。
+
+==但是，失效时间设置为多长好呢？失效时间太短，方法还没执行完，锁就自动释放了。如果设置时间太长，其他获取锁的线程可能要平白多等一段时间。==
+
+**总结**
+
+可以使用缓存来代替数据库实现分布式锁，可以提高性能，可以避免单点问题。redis提供了可以用实现分布式锁的方法，使用setnx方法。并且这些缓存服务也都提供了对数据的过期自动删除的支持，可以直接设置超时时间来控制锁的释放。
+
+优点： 性能好，实现起来比较方便
+
+缺点： 通过时间来控制锁，十分的不方便。
+
+
 
 ### zookeeper分布式锁
 
@@ -1510,6 +1639,38 @@ public class TicketSeller {
     }
 }
 ```
+
+**缺点：**
+
+- 性能上没有缓存服务器那么高，（因为每次创建锁和释放锁的过程，都要动态创建，销毁瞬时节点来实现锁功能。）都需要由Leader服务器来控制
+- 也有可能带来并发问题。（有可能因为网络抖动，zk集群以为session连接断了，zk以为客户端断了，这时候断开连接，其他客户端就会获取到锁，就产生了并发问题。）。这个问题不常见是因为zk有重试机制。
+
+**总结**
+
+- 优点：有效的解决单点问题，不重入问题，非阻塞问题以及锁无法释放的问题。实现起来比较简单 
+- 缺点：性能上步入缓存式分布式锁，需要对zk有所理解。
+
+-------
+
+以上三种方案比较
+
+ **从理解的难易程度角度（从低到高）**
+
+数据库 > 缓存 > Zookeeper
+
+**从实现的复杂性角度（从低到高）**
+
+Zookeeper >= 缓存 > 数据库
+
+**从性能角度（从高到低）**
+
+缓存 > Zookeeper >= 数据库
+
+**从可靠性角度（从高到低）**
+
+Zookeeper > 缓存 > 数据库
+
+
 
 ## curator
 
@@ -2224,11 +2385,523 @@ mntr: 列出服务器的健康状态
 
 ![image-20201226173535386](images/image-20201226173535386.png)
 
+**思维导图：**https://www.processon.com/view/link/5b46f930e4b07b023103bcaf#map
+
+### 分布式锁
+
+
+
+<img src="images/image-20201229210225844.png" alt="image-20201229210225844" style="zoom:80%;" />
+
+- InterProcessMutex：分布式可重入排它锁
+- InterProcessSemaphoreMutex：分布式排它锁
+- InterProcessReadWriteLock：分布式读写锁
+- InterProcessMultiLock：将多个锁作为单个实体管理的容器
+
+#### **InterProcessMutex**
+
+##### 获取锁过程
+
+**一，实例化InterProcessMutex**
+
+```java
+// 代码进入：InterProcessMutex.java
+    /**
+     * @param client client
+     * @param path   the path to lock
+     */
+    public InterProcessMutex(CuratorFramework client, String path)
+    {
+        this(client, path, new StandardLockInternalsDriver());
+    }
+    /**
+     * @param client client
+     * @param path   the path to lock
+     * @param driver lock driver
+     */
+    public InterProcessMutex(CuratorFramework client, String path, LockInternalsDriver driver)
+    {
+        this(client, path, LOCK_NAME, 1, driver);
+    }
+```
+
+> 两个构造函数共同的入参：
+>
+> - client：curator实现的zookeeper客户端
+> - path：要在zookeeper加锁的路径，即后面创建临时节点的父节点
+
+==上面的两个构造函数，其实也是第一个在调用第二个，传入默认的变量==
+
+------
+
+```dart
+// 代码进入：InterProcessMutex.java
+InterProcessMutex(CuratorFramework client, String path, String lockName, int maxLeases, LockInternalsDriver driver)
+    {
+        basePath = PathUtils.validatePath(path);
+        internals = new LockInternals(client, driver, path, lockName, maxLeases);
+    }
+// 代码进入：LockInternals.java
+LockInternals(CuratorFramework client, LockInternalsDriver driver, String path, String lockName, int maxLeases)
+    {
+        this.driver = driver;
+        this.lockName = lockName;
+        this.maxLeases = maxLeases;
+
+        this.client = client.newWatcherRemoveCuratorFramework();
+        this.basePath = PathUtils.validatePath(path);
+        this.path = ZKPaths.makePath(path, lockName);
+    }
+```
+
+以上代码主要做了两件事：
+
+1. 验证入参path的合法性	
+2. 实例化一个LockInternals对象
+
+**二，加锁方法acquire**
+
+> 实例化完成的InterProcessMutex对象，开始调用acquire() 方法来尝试加锁
+
+```java
+// 代码进入：InterProcessMutex.java
+   /**
+     * Acquire the mutex - blocking until it's available. Note: the same thread
+     * can call acquire re-entrantly. Each call to acquire must be balanced by a call
+     * to {@link #release()}
+     *
+     * @throws Exception ZK errors, connection interruptions
+     */
+    @Override
+    public void acquire() throws Exception
+    {
+        if ( !internalLock(-1, null) )
+        {
+            throw new IOException("Lost connection while trying to acquire lock: " + basePath);
+        }
+    }
+
+    /**
+     * Acquire the mutex - blocks until it's available or the given time expires. Note: the same thread
+     * can call acquire re-entrantly. Each call to acquire that returns true must be balanced by a call
+     * to {@link #release()}
+     *
+     * @param time time to wait
+     * @param unit time unit
+     * @return true if the mutex was acquired, false if not
+     * @throws Exception ZK errors, connection interruptions
+     */
+    @Override
+    public boolean acquire(long time, TimeUnit unit) throws Exception
+    {
+        return internalLock(time, unit);
+    }
+```
+
+- acquire() : 入参为空，调用该方法后，会一直阻塞，直到抢占到锁资源，或者zookeeper链接中断后，上抛异常。
+- acquire(long time, TimeUnit unit)：入参传入超时时间以及单位，抢夺时，如果出现堵塞，会在超过该时间后，返回false。
+
+对比两种方式，可以选择适合自己业务逻辑的方法。但是一般情况下，我推荐后者，传入超时时间，避免出现大量的临时节点累积以及线程堵塞的问题。
+
+**三，锁的可重人**
+
+```java
+// 代码进入：InterProcessMutex.java
+private boolean internalLock(long time, TimeUnit unit) throws Exception
+    {
+        /*
+           Note on concurrency: a given lockData instance
+           can be only acted on by a single thread so locking isn't necessary
+        */
+
+        Thread currentThread = Thread.currentThread();
+
+        LockData lockData = threadData.get(currentThread);
+        if ( lockData != null )
+        {
+            // re-entering
+            lockData.lockCount.incrementAndGet();
+            return true;
+        }
+        String lockPath = internals.attemptLock(time, unit, getLockNodeBytes());
+        if ( lockPath != null )
+        {
+            LockData newLockData = new LockData(currentThread, lockPath);
+            threadData.put(currentThread, newLockData);
+            return true;
+        }
+        return false;
+    }
+```
+
+这段代码实现了锁的可重入，每个InterProcessMutex实例，都会持有一个Concurrentmap类型的threadData对象，以线程对象作为key，以LocalData作为值、通过判断当前线程threadData是否有值，如果有则表示当前线程可重入，于是将lockCount进行累加；如果没有，则进行锁的抢夺。
+
+当internals.attemptLock方法返回lockPath 等于 null时，表明了该线程已经成功持有了这把锁，于是乎LockData对象被new了出来，并存放到threadData中。
+
+**四，抢夺锁**
+
+> attemptLock方法就是核心部分，直接看代码
+
+```java
+// 代码进入：LockInternals.java
+String attemptLock(long time, TimeUnit unit, byte[] lockNodeBytes) throws Exception
+    {
+        final long      startMillis = System.currentTimeMillis();
+        final Long      millisToWait = (unit != null) ? unit.toMillis(time) : null;
+        final byte[]    localLockNodeBytes = (revocable.get() != null) ? new byte[0] : lockNodeBytes;
+        int             retryCount = 0;
+
+        String          ourPath = null;
+        boolean         hasTheLock = false;
+        boolean         isDone = false;
+        while ( !isDone )
+        {
+            isDone = true;
+
+            try
+            {
+                ourPath = driver.createsTheLock(client, path, localLockNodeBytes);
+                hasTheLock = internalLockLoop(startMillis, millisToWait, ourPath);
+            }
+            catch ( KeeperException.NoNodeException e )
+            {
+                // gets thrown by StandardLockInternalsDriver when it can't find the lock node
+                // this can happen when the session expires, etc. So, if the retry allows, just try it all again
+                if ( client.getZookeeperClient().getRetryPolicy().allowRetry(retryCount++, System.currentTimeMillis() - startMillis, RetryLoop.getDefaultRetrySleeper()) )
+                {
+                    isDone = false;
+                }
+                else
+                {
+                    throw e;
+                }
+            }
+        }
+
+        if ( hasTheLock )
+        {
+            return ourPath;
+        }
+        return null;
+    }
+```
+
+此处注意三个地方
+
+- while循环
+  - 正常情况下，这个循环会在下一次结束。但是当出现NoNodeException异常时，会根据zookeeper客户端的重试策略，进行有限次数的重新获取锁
+- driver.createTheLock
+  - 顾名思义，这个driver的createTheLock方法就是在创建这个锁，即在zookeeper的指定路径上，创建一个临时有序节点。注意：此时只是纯粹的创建了一个节点，不是说线程已经持有锁。
+
+```java
+// 代码进入：StandardLockInternalsDriver.java
+    @Override
+    public String createsTheLock(CuratorFramework client, String path, byte[] lockNodeBytes) throws Exception
+    {
+        String ourPath;
+        if ( lockNodeBytes != null )
+        {
+            ourPath = client.create().creatingParentContainersIfNeeded().withProtection().withMode(CreateMode.EPHEMERAL_SEQUENTIAL).forPath(path, lockNodeBytes);
+        }
+        else
+        {
+            ourPath = client.create().creatingParentContainersIfNeeded().withProtection().withMode(CreateMode.EPHEMERAL_SEQUENTIAL).forPath(path);
+        }
+        return ourPath;
+    }
+```
+
+- 判断自身能否持有锁。如果不能，进入wait，等待被唤醒。
+
+```java
+// 代码进入：LockInternals.java
+private boolean internalLockLoop(long startMillis, Long millisToWait, String ourPath) throws Exception
+    {
+        boolean     haveTheLock = false;
+        boolean     doDelete = false;
+        try
+        {
+            if ( revocable.get() != null )
+            {
+                client.getData().usingWatcher(revocableWatcher).forPath(ourPath);
+            }
+
+            while ( (client.getState() == CuratorFrameworkState.STARTED) && !haveTheLock )
+            {
+                List<String>        children = getSortedChildren();
+                String              sequenceNodeName = ourPath.substring(basePath.length() + 1); // +1 to include the slash
+
+                PredicateResults    predicateResults = driver.getsTheLock(client, children, sequenceNodeName, maxLeases);
+                if ( predicateResults.getsTheLock() )
+                {
+                    haveTheLock = true;
+                }
+                else
+                {
+                    String  previousSequencePath = basePath + "/" + predicateResults.getPathToWatch();
+
+                    synchronized(this)
+                    {
+                        try 
+                        {
+                            // use getData() instead of exists() to avoid leaving unneeded watchers which is a type of resource leak
+                            client.getData().usingWatcher(watcher).forPath(previousSequencePath);
+                            if ( millisToWait != null )
+                            {
+                                millisToWait -= (System.currentTimeMillis() - startMillis);
+                                startMillis = System.currentTimeMillis();
+                                if ( millisToWait <= 0 )
+                                {
+                                    doDelete = true;    // timed out - delete our node
+                                    break;
+                                }
+
+                                wait(millisToWait);
+                            }
+                            else
+                            {
+                                wait();
+                            }
+                        }
+                        catch ( KeeperException.NoNodeException e ) 
+                        {
+                            // it has been deleted (i.e. lock released). Try to acquire again
+                        }
+                    }
+                }
+            }
+        }
+        catch ( Exception e )
+        {
+            ThreadUtils.checkInterrupted(e);
+            doDelete = true;
+            throw e;
+        }
+        finally
+        {
+            if ( doDelete )
+            {
+                deleteOurPath(ourPath);
+            }
+        }
+        return haveTheLock;
+    }
+```
+
+> - while循环
+>   - 如果一开始使用acquire方法，那么此处的循环可能就是一个死循环。当zookeeper客户端启动时，并且当线程还没有成功获取锁的时，就会开始新的一轮循环。
+> - getSortedChildren
+>   - 这个方法比较简单，就是获取到所有子节点列表，并且从小到大根据节点名称后10位数字进行排序，上面提到了，创建的是顺序节点
+> - driver.getsTheLock
+>
+> ```java
+> // 代码进入：StandardLockInternalsDriver.java
+> @Override
+>     public PredicateResults getsTheLock(CuratorFramework client, List<String> children, String sequenceNodeName, int maxLeases) throws Exception
+>     {
+>         int             ourIndex = children.indexOf(sequenceNodeName);
+>         validateOurIndex(sequenceNodeName, ourIndex);
+> 
+>         boolean         getsTheLock = ourIndex < maxLeases;
+>         String          pathToWatch = getsTheLock ? null : children.get(ourIndex - maxLeases);
+> 
+>         return new PredicateResults(pathToWatch, getsTheLock);
+>     }
+> ```
+>
+> 判断是否可以持有锁，判断规则：当前创建的节点是否在上一步获取到的子节点列表的首位。
+>
+> 如果是，说明可以持有锁，那么getTheLock =true,封装进PredicateResults 返回。
+>
+> 如果不是，说明有其他线程早已先持有了锁。那么getsTheLock = false, 此处还需要获取到自己前一个临时节点的名称pathToWatch。(注意这个pathToWatch后面有比较关键的作用)
+
+**sychronized(this)**
+
+这块代码在争夺失败以后的逻辑中。那么此处该线程应该做什么呢？
+
+> 首先添加一个watcher监听，而监听的地址正是上面一步返回的pathToWatch进行basePath + "/" 拼接以后的地址。也就是说当前线程会监听自己前一个节点的变动，而不是父节点下所有节点的变动。然后华丽丽的...wait(millisToWait)。线程交出cpu的占用，进入等待状态，等到被唤醒。
+>
+> 接下来的逻辑就很自然了，如果自己监听的节点发生了变动，那么就将线程从等待状态唤醒，重新一轮的锁的争夺。
+
+此时我们就完成了整个锁的抢夺过程。
+
+##### 释放锁
+
+> 释放锁的逻辑相对简单
+
+```csharp
+// 代码进入：InterProcessMutex.java
+/**
+     * Perform one release of the mutex if the calling thread is the same thread that acquired it. If the
+     * thread had made multiple calls to acquire, the mutex will still be held when this method returns.
+     *
+     * @throws Exception ZK errors, interruptions, current thread does not own the lock
+     */
+    @Override
+    public void release() throws Exception
+    {
+        /*
+            Note on concurrency: a given lockData instance
+            can be only acted on by a single thread so locking isn't necessary
+         */
+
+        Thread currentThread = Thread.currentThread();
+        LockData lockData = threadData.get(currentThread);
+        if ( lockData == null )
+        {
+            throw new IllegalMonitorStateException("You do not own the lock: " + basePath);
+        }
+
+        int newLockCount = lockData.lockCount.decrementAndGet();
+        if ( newLockCount > 0 )
+        {
+            return;
+        }
+        if ( newLockCount < 0 )
+        {
+            throw new IllegalMonitorStateException("Lock count has gone negative for lock: " + basePath);
+        }
+        try
+        {
+            internals.releaseLock(lockData.lockPath);
+        }
+        finally
+        {
+            threadData.remove(currentThread);
+        }
+    }
+```
+
+- 减少重入锁的计数，直到变成0
+- 释放锁，即移除Watcher & 删除创建的节点
+- 从threadData中，删除自己线程的缓存
+
+##### 驱动类
+
+> 开始的时候，我们提到了这个StandardLockInternalsDriver 标准锁驱动类。还提到了我们可以传入自定义的，来扩展。
+>
+> 先看看它提供的功能接口
+
+```java
+// 代码进入LockInternalsDriver.java
+public PredicateResults getsTheLock(CuratorFramework client, List<String> children, String sequenceNodeName, int maxLeases) throws Exception;
+
+public String createsTheLock(CuratorFramework client,  String path, byte[] lockNodeBytes) throws Exception;
+
+// 代码进入LockInternalsSorter.java
+public String           fixForSorting(String str, String lockName);
+```
+
+- getsTheLock:  判断是够获取到了锁
+- createsTheLock: 在zookeeper的指定路径上，创建一个临时序列节点
+- fixForSorting: 修复排序，在StandardLockInternalsDriver的实现中，即获取到临时节点的最后序列数，进行排序。
+
+借助于这个类，我们可以尝试实现自己的锁机制，比如判断获得的策略可以做修改，比如获取子节点列表的排序方案可以自定义。。。
+
+##### 总结
+
+InterProcessMutex 通过在zookeeper的某路径节点下创建临时有序节点来实现分布式锁，即每个线程（跨进程的线程）获取同一把锁前，都需要在同样的路径下创建一个节点，节点名字由uuid + 递增序列组成。而通过对比自身的序列数是否在所有子节点的第一位，来判断是否成功获取到了锁。当获取锁失败时，它会添加watcher来监听前一个节点的情况，然后进行等待状态。直到watcher的事件生效将自己唤醒，或者超时时间异常返回。
+
+
+
+## 网络编程
+
+### 网络通信的三要素
+
+**IP**
+
+> 网路中计算机的唯一表标识：
+>
+> ​	32bit（4字节），一般用于“点分十进制”表示，如192.168.1.158；
+>
+> ​	IP地址 = 网络地址 + 主机地址 可分类：
+>
+> - A类：第1个8位表示网络地址。剩下的3个8位表示主机地址
+> - B类：前2个8位表示网络地址。剩下的2个8位表示主机地址
+> - C类：前3个8位表示网络地址。剩下的1个8位表示主机地址
+> - D类地址用于在IP网络中组播
+> - E类地址保留做科研之用
+
+Java编程中可以通过InetAddress类去获取IP地址
+
+```java
+InetAddress localHost = InetAddress.getLocalHost();
+localHost.getLocalHost();
+localHost.getHostName();
+```
+
+**端口号**
+
+用于标识进程的逻辑地址，不同进程的标识。
+
+有效端口：0-65535，其中0-1024 系统使用或保留端口
+
+**传输的协议**
+
+- **UDP**
+  - 将数据和目标封装成数据包中，不需要建立连接
+  - 每个数据报大小限制在64k以内
+  - 因为不需要建立连接，是不可靠的协议
+  - 不需要建立连接速度快
+- **TCP**
+  - 建立连接，形成通信通道
+  - 在连接中进行大量数据传输
+  - 通过三次握手完成连接，是可靠协议
+  - 必须建立连接，效率会稍低
+
+### 网络模型
+
+<img src="images/image-20201228135646145.png" alt="image-20201228135646145" style="zoom:80%;" />
+
+**物理层**
+
+​	主要定义物理设备标准，如网线的接口类型，光纤的接口类型，各种传输介质的传输速率等。
+
+​	主要作用是将数据最终编码为0,1表示的比特流，通过物理介质传输。这一层叫做比特
+
+**数据链路层**
+
+​	主要将接受到的数据进程MAC地址否封装与解封装。常把这一层的数据叫做帧。这一层常工作的设备是交换机
+
+**网络层**
+
+​	主要讲收到的数据进行IP地址的封装与解封，常把这一层叫做数据包。这一层的设备是路由器
+
+**传输层**
+
+​	定义了一些数据传输的协议和端口号。
+
+​	主要将接受的数据进行分段和传输，到达目的地址后在进行重组。
+
+​	常把这一层的数据叫做段。
+
+**会话层**
+
+​	通过传输层建立数据传输的通路。主要在系统之间发起会话或者接收会话请求。
+
+**表示层**
+
+​	主要进行对接受数据的解释，加密与解密，压缩与解压缩
+
+​	确保一个系统的应用层发送的数据能被另一个系统的应用层识别。
+
+**应用层**
+
+​	主要是为了一些终端应用程序提供服务。直接面对着用户。
+
+
+
+### IO通信模型
+
+
+
+### Socket机制
 
 
 
 
 
+### RPC原理
 
 
 
