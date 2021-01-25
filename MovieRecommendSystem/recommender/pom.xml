@@ -15,6 +15,7 @@
     <modules>
         <module>dataloader</module>
         <module>OfflineRecommender</module>
+        <module>StreamRecommender</module>
     </modules>
 
     <dependencyManagement>
