@@ -1,12 +1,14 @@
 package com.duoyi.streaming
 
+import com.mongodb.casbah.commons.MongoDBObject
+import com.mongodb.casbah.{MongoClient, MongoClientURI}
+import kafka.Kafka
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.Second
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils, LocationStrategies}
-import org.joda.time.Seconds
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import redis.clients.jedis.Jedis
 
 object StreamingRecommender {
 
