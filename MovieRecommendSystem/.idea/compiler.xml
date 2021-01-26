@@ -9,7 +9,13 @@
         <module name="StreamRecommender" />
         <module name="StatisticsRecommender" />
         <module name="dataloader" />
+<<<<<<< HEAD
         <module name="OfflineRecommender" />
+=======
+        <module name="StatisticsRecommender" />
+        <module name="OfflineRecommender" />
+        <module name="StreamRecommender" />
+>>>>>>> 693cade2094269e2312d239c81569832b41e3b73
       </profile>
     </annotationProcessing>
   </component>

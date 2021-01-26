@@ -2,12 +2,15 @@ package com.duoyi.streaming
 
 import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.{MongoClient, MongoClientURI}
+<<<<<<< HEAD
+=======
+import kafka.Kafka
+>>>>>>> 693cade2094269e2312d239c81569832b41e3b73
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.Second
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils, LocationStrategies}
+<<<<<<< HEAD
 import org.joda.time.Seconds
 import redis.clients.jedis.Jedis
 
@@ -28,6 +31,10 @@ case class UserRecs(uid: Int, recs: Seq[Recommendation])
 
 //电影的相似度
 case class MovieRecs(mid: Int, recs: Seq[Recommendation])
+=======
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import redis.clients.jedis.Jedis
+>>>>>>> 693cade2094269e2312d239c81569832b41e3b73
 
 object StreamingRecommender {
 
