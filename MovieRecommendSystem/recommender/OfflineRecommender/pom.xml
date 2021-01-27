@@ -49,11 +49,14 @@
             <artifactId>casbah-core_2.11</artifactId>
             <version>${casban.version}</version>
         </dependency>
+
         <dependency>
             <groupId>org.mongodb.spark</groupId>
             <artifactId>mongo-spark-connector_2.11</artifactId>
             <version>${mongodb-spark.version}</version>
         </dependency>
+
+
     </dependencies>
 
 </project>

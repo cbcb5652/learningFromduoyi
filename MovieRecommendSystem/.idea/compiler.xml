@@ -6,16 +6,10 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="StreamRecommender" />
-        <module name="StatisticsRecommender" />
         <module name="dataloader" />
-<<<<<<< HEAD
-        <module name="OfflineRecommender" />
-=======
-        <module name="StatisticsRecommender" />
-        <module name="OfflineRecommender" />
         <module name="StreamRecommender" />
->>>>>>> 693cade2094269e2312d239c81569832b41e3b73
+        <module name="OfflineRecommender" />
+        <module name="StatisticsRecommender" />
       </profile>
     </annotationProcessing>
   </component>

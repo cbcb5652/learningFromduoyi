@@ -5,9 +5,7 @@ import org.apache.spark.mllib.recommendation.{ALS, Rating}
 import org.apache.spark.sql.SparkSession
 import org.jblas.DoubleMatrix
 
-case class Movie(mid: Int, name: String, descri: String, timelong: String, issue: String,
-                 shoot: String, language: String, genres: String, actors: String, directors: String)
-
+// 基于评分数据的LFM，只需要rating数据
 case class MovieRating(uid: Int, mid: Int, score: Double, timestamp: Int )
 
 case class MongoConfig(uri:String, db:String)
@@ -15,19 +13,15 @@ case class MongoConfig(uri:String, db:String)
 // 定义一个基准推荐对象
 case class Recommendation( mid: Int, score: Double )
 
-// 定义电影类别top10推荐对象
-case class GenresRecommendation( genres: String, recs: Seq[Recommendation] )
+// 定义基于预测评分的用户推荐列表
+case class UserRecs( uid: Int, recs: Seq[Recommendation] )
 
-// 用户的推荐
-case class UserRecs(uid:Int,recs:Seq[Recommendation])
-
-// 电影的相似度
+// 定义居于LFM电影特征向量的电影相似度列表
 case class MovieRecs(mid:Int,recs:Seq[Recommendation])
 
 object OfflineRecommender {
 
   val MONGODB_RATING_COLLECTION = "Rating";
-  val MONGODB_MOVIE_COLLECTION = "Movie";
 
   val USER_MAX_RECOMMENDATION = 20;
 
@@ -46,7 +40,6 @@ object OfflineRecommender {
 
     // 创建一个SparkConf配置
     val sparkConf = new SparkConf().setAppName("OfflineRecommender").setMaster(config("spark.cores"))
-      .set("spark.executor.memory","6G").set("spark.driver.memory","3G");
 
     // 基于SparkConf创建一个SparkSession
     val  spark = SparkSession.builder().config(sparkConf).getOrCreate();
@@ -56,36 +49,30 @@ object OfflineRecommender {
 
     import spark.implicits._
 
+    println(mongoConfig.uri)
+    println(MONGODB_RATING_COLLECTION)
+
     // 读取mongoDB中的业务数据  ratingRDD是一个三元组类型 int int double
     val ratingRDD = spark
-      .read
-      .option("uri",mongoConfig.uri)
-      .option("colletion",MONGODB_RATING_COLLECTION)
-      .format("com.mongodb.spark.sql")
-      .load()
-      .as[MovieRating]
-      .rdd
-      .map(rating=> (rating.uid,rating.mid,rating.score))
-
-    // 用户的数据集 RDD[Int]    去重
-    val userRDD = ratingRDD.map(_._1).distinct()
-
-    // 电影的数据集  RDD[Int]
-    val movieRDD = spark
       .read
       .option("uri",mongoConfig.uri)
       .option("collection",MONGODB_RATING_COLLECTION)
       .format("com.mongodb.spark.sql")
       .load()
-      .as[Movie]
+      .as[MovieRating]
       .rdd
-      .map(_.mid)
+      .map(rating=> (rating.uid,rating.mid,rating.score))
+      .cache()
+
+    // 用户的数据集 RDD[Int]    去重
+    val userRDD = ratingRDD.map(_._1).distinct()
+    val movieRDD = ratingRDD.map(_._2).distinct()
 
     // 训练ALS模型
     val trainData = ratingRDD.map(x => Rating(x._1,x._2,x._3));
 
     // 50个数据迭代10次
-    val (rank,iterations,lambda) = (50,10,0.01)
+    val (rank,iterations,lambda) = (200,10,0.01)
 
     // 传入参数:训练模型,迭代的数据,迭代次数,迭代频率
     val model = ALS.train(trainData,rank, iterations,lambda)
@@ -104,11 +91,9 @@ object OfflineRecommender {
         case (uid,recs) => UserRecs(uid,recs.toList.sortWith(_._2 > _._2).take(USER_MAX_RECOMMENDATION).map(x => Recommendation(x._1,x._2)))
       }.toDF()
 
-
     userRecs.write
       .option("uri",mongoConfig.uri)
       .option("collection",USER_RECS)
-      .mode("overwrite")
       .format("com.mongodb.spark.sql")
       .save()
 
@@ -134,7 +119,7 @@ object OfflineRecommender {
       .write
       .option("uri",mongoConfig.uri)
       .option("collection",MOVIE_RECS)
-      .model("overwrite")
+      .mode("overwrite")
       .format("com.mongodb.spark.sql")
       .save
 
