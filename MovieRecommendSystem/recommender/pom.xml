@@ -16,6 +16,7 @@
         <module>dataloader</module>
         <module>OfflineRecommender</module>
         <module>StreamRecommender</module>
+        <module>kafkaStream</module>
     </modules>
 
     <dependencyManagement>

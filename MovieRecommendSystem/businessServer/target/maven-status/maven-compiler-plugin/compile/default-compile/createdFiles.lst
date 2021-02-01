@@ -1,0 +1,3 @@
+com\duoyi\business\rest\UserRestApi.class
+com\duoyi\business\rest\MovieRestApi.class
+com\duoyi\business\model\domain\User.class

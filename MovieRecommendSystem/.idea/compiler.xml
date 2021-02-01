@@ -10,8 +10,15 @@
         <module name="StatisticsRecommender" />
         <module name="website" />
         <module name="dataloader" />
+        <module name="kafkaStream" />
         <module name="OfflineRecommender" />
+        <module name="businessServer" />
       </profile>
     </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="businessServer" options="" />
+    </option>
   </component>
 </project>
