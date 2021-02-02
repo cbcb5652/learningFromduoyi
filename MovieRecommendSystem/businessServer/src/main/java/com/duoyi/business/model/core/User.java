@@ -1,4 +1,4 @@
-package com.duoyi.business.model.domain;
+package com.duoyi.business.model.core;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;

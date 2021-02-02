@@ -1,18 +1,14 @@
 package com.duoyi.business.service;
 
-import com.duoyi.business.model.domain.User;
+import com.duoyi.business.model.core.User;
 import com.duoyi.business.request.LoginUserRequest;
 import com.duoyi.business.request.RegisterUserReqeuest;
 import com.duoyi.business.request.UpdateUserGenresRequest;
 import com.duoyi.business.utils.Constant;
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.MongoClient;
-import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.model.Filters;
 import com.mongodb.util.JSON;
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -120,6 +116,19 @@ public class UserService {
     public void updateUserGenres(UpdateUserGenresRequest request){
         getUserCollection().updateOne(new Document("username",request.getUsername()),new Document().append("$set",new Document("$genres",request.getGenres())));
         getUserCollection().updateOne(new Document("username",request.getUsername()),new Document().append("$set",new Document("first",false)));
+    }
+
+    /**
+     * 通过用户名查询一个用户
+     * @param username
+     * @return
+     */
+    public User findUserByUsername(String username){
+        Document document = getUserCollection().find(new Document("username", username)).first();
+        if (null == document || document.isEmpty()){
+            return null;
+        }
+        return documentToUser(document);
     }
 
 
